@@ -1,0 +1,9 @@
+﻿.env
+__pycache__/
+.venv/
+env/
+venv/
+backend/handlers-old.py
+.idea/
+*.exe
+config.py
