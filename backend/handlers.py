@@ -38,11 +38,14 @@ async def voice_send(message: Message):
 
 # Function for downloading audio from message
 async def download_audiofile(message: Message, audioname: str = None, is_voice: bool = False):
-    audio = message.voice
-    file_id = audio.file_id
+
     if is_voice:
+        audio = message.voice
+        file_id = audio.file_id
         audio_name = audioname
     else:
+        audio = message.audio
+        file_id = audio.file_id
         audio_name = audio.file_name
     file_info = await message.bot.get_file(file_id)
     file_path = file_info.file_path
@@ -78,19 +81,26 @@ async def download_music(message: Message):
 
 # Handler for voice to text converter
 @router.message(F.content_type.in_({'voice'}))
-async def voice_to_text(message: Message):
+async def voice_to_text(message: Message) -> None:
     await message.answer('Downloading voice message...')
-    await download_audiofile(message, audioname='voice.ogg', is_voice=True)
+    try:
+        await download_audiofile(message, audioname='voice.ogg', is_voice=True)
+    except Exception as e:
+        await message.answer(f'Error downloading voice message: {e}')
+        return
     await message.answer('Extracting text...')
-    downloads_path = os.path.join(os.environ['USERPROFILE'], 'Downloads', 'voice.ogg')
-    res = tr.extract_text(downloads_path)
-    os.remove(downloads_path)
-    await message.answer(res)
+    try:
+        downloads_path = os.path.join(os.environ['USERPROFILE'], 'Downloads', 'voice.ogg')
+        res = tr.extract_text(downloads_path)
+        os.remove(downloads_path)
+        await message.answer(res)
+    except Exception as e:
+        await message.answer(f'Error while extracting text: {e}')
 
 # Handler for command /help
 @router.message((F.text == '/help') & F.from_user.id.in_(whitelist))
 async def help(message: Message):
-    await message.answer('Help yourself, you little pussy boy!!!')
+    await message.answer('Help yourself, you little pussy!!!')
 
 # Handler for Screenshot button
 @router.message((F.text == '📷Screenshot') & F.from_user.id.in_(whitelist))
