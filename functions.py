@@ -4,7 +4,7 @@ import keyboard as kb
 import pyautogui
 
 # Download audio from YouTube music
-async def download_audio(yt_url, query = 'result'):
+async def download_audio(yt_url, query = 'result') -> None:
     ydl_opts = {
         'format': 'bestaudio/best',
         'postprocessors': [{
@@ -28,9 +28,6 @@ async def change_volume(vector: str) -> None:
     else:
         for i in range(5):
             kb.send("volume down")
-
-def mute_pc_sound():
-    kb.send("volume mute")
 
 def take_screenshot(name: str = 'screenshot.png') -> None:
     image = pyautogui.screenshot()

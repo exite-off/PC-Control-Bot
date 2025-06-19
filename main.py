@@ -8,7 +8,7 @@ bot = Bot(token=API_KEY)
 dp = Dispatcher()
 
 # Main function with bot polling
-async def main():
+async def main() -> None:
     dp.include_router(router)
     await dp.start_polling(bot)
 
