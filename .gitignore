@@ -7,3 +7,4 @@ backend/handlers-old.py
 .idea/
 *.exe
 config.py
+output/

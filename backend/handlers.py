@@ -2,9 +2,12 @@ from aiogram.types import (Message, FSInputFile, InlineQuery,
                            InlineQueryResultArticle, InputTextMessageContent,
                            CallbackQuery)
 from aiogram import F, Router
+from yt_dlp.utils import DownloadError, ExtractorError
 from backend.keyboards import main_keyboard, media_keyboard, on_music_keyboard
 import os
 import hashlib
+from pathlib import Path
+from ytmusicapi.exceptions import YTMusicUserError
 import functions
 from pydub import AudioSegment
 import win32api
@@ -27,7 +30,6 @@ async def voice_send(message: Message) -> None:
     downloaded_file = await message.bot.download_file(file_path)
     with open(f'{file_id}.mp3', 'wb') as f:
         f.write(downloaded_file.getvalue())
-        f.close()
     # convert file to .ogg, send it as voice message
     sound = AudioSegment.from_mp3(f'{file_id}.mp3')
     sound.export('result.ogg', format='ogg', codec="libopus")
@@ -66,41 +68,33 @@ async def start(message: Message) -> None:
 @router.message(F.text.contains('/music') & F.text.startswith('/')
                 & F.from_user.id.in_(whitelist))
 async def download_music(message: Message) -> None:
-    if len(message.text) > 7:
-        query: str = message.text[7:]
-        await message.answer(f'Searching for {query}')
-        search_res: list[dict] = functions.yt.search(query=query, filter='videos',
-                                                     limit=1)
-        mus_id: str = search_res[0]['videoId']
-        url: str = functions.base_url + mus_id
-        await functions.download_audio(url, query)
-        await message.reply(f'Downloaded, sending!\n{url}')
-        try:
-            await message.answer_audio(audio=FSInputFile(f'{query}.mp3'))
-        except Exception as e:
-            await message.answer(f'Error: {e}')
-        os.remove(f'{query}.mp3')
-    else:
+    if len(message.text) <= 7:
         await message.answer('No query provided')
+        return
+    query: str = message.text[7:]
+    await message.answer(f'Searching for {query}')
+    try:
+        search_res: list[dict] = functions.yt.search(query=query, filter='videos', limit=1)
+    except YTMusicUserError:
+        await message.answer(f'Error while searching.')
+        return
+    mus_id: str = search_res[0]['videoId']
+    url: str = functions.base_url + mus_id
+    await functions.download_audio(url, query)
+    await message.reply(f'Downloaded, sending!\n{url}')
+    await message.answer_audio(audio=FSInputFile(f'{query}.mp3'))
+    os.remove(f'{query}.mp3')
 
 # Handler for voice to text converter
 @router.message(F.content_type.in_({'voice'}))
 async def voice_to_text(message: Message) -> None:
     await message.answer('Downloading voice message...')
-    try:
-        await download_audiofile(message, audioname='voice.ogg', is_voice=True)
-    except Exception as e:
-        await message.answer(f'Error downloading voice message: {e}')
-        return
+    await download_audiofile(message, audioname='voice.ogg', is_voice=True)
     await message.answer('Extracting text...')
-    try:
-        downloads_path: str = os.path.join(os.environ['USERPROFILE'],
-                                           'Downloads', 'voice.ogg')
-        res: str = tr.extract_text(downloads_path)
-        os.remove(downloads_path)
-        await message.answer(res)
-    except Exception as e:
-        await message.answer(f'Error while extracting text: {e}')
+    downloads_path: str = os.path.join(os.environ['USERPROFILE'], 'Downloads', 'voice.ogg')
+    res: str = tr.extract_text(downloads_path)
+    os.remove(downloads_path)
+    await message.answer(res)
 
 # Handler for command /help
 @router.message((F.text == '/help') & F.from_user.id.in_(whitelist))
@@ -118,7 +112,7 @@ async def screenshot_command(message: Message) -> None:
 # Handler for Show Desktop button
 @router.message((F.text == '🖥️Show Desktop') & F.from_user.id.in_(whitelist))
 async def show_desktop_command(message: Message) -> None:
-    pyautogui.hotkey('win', 'd')
+    pyautogui.hotkey('win', 'm')
     await message.answer('Switched to desktop')
 
 # Handler for Medio control button
@@ -185,9 +179,31 @@ async def download_music_callback(callback_query: CallbackQuery) -> None:
     await download_audiofile(callback_query.message.reply_to_message)
     await callback_query.message.edit_text('Done!')
 
+# Download music from YouTube Music link
 @router.message(F.text.contains('music.youtube.com') & F.from_user.id.in_(whitelist))
 async def download_music_from_link(message: Message) -> None:
     url: str = message.text
-    await functions.download_audio(url)
+    await message.reply('Initializing download...')
+    try:
+        await functions.download_audio(url)
+    except (DownloadError, ExtractorError):
+        await message.answer('Error while downloading/extracting audio')
+        return
     await message.answer_audio(audio=FSInputFile('result.mp3'))
     os.remove('result.mp3')
+
+# Handler for other file types (downloading files)
+@router.message(F.content_type.in_({'photo', 'document'}))
+async def download_file(message: Message) -> None:
+    if message.content_type == 'photo':
+        file_id: str = message.photo[-1].file_id
+    else:
+        file_id: str = message.document.file_id
+    file_info = await message.bot.get_file(file_id)
+    file_path: str | None = file_info.file_path
+    await message.answer(f"Downloading file: {file_path}")
+    downloaded_file = await message.bot.download_file(file_path)
+    downloads_path = str(Path.home() / "Downloads") + "/" + file_path.split('/')[-1]
+    with open(downloads_path, 'wb') as f:
+        f.write(downloaded_file.getvalue())
+    await message.answer('File downloaded successfully!')
