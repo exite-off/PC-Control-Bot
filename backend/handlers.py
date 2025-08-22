@@ -193,10 +193,12 @@ async def download_music_from_link(message: Message) -> None:
     os.remove('result.mp3')
 
 # Handler for other file types (downloading files)
-@router.message(F.content_type.in_({'photo', 'document'}))
+@router.message(F.content_type.in_({'photo', 'document', 'video'}) & F.from_user.id.in_(whitelist))
 async def download_file(message: Message) -> None:
     if message.content_type == 'photo':
         file_id: str = message.photo[-1].file_id
+    elif message.content_type == 'video':
+        file_id: str = message.video.file_id
     else:
         file_id: str = message.document.file_id
     file_info = await message.bot.get_file(file_id)
